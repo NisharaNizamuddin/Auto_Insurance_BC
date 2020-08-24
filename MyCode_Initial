@@ -1,0 +1,167 @@
+pragma solidity ^0.4.10;
+contract Telmedcontract {
+
+address public customer;
+address public policedept; 
+address public insurance_company;
+address public garage_supervisor;
+string public customer_Info;
+string cust_Name;
+string cust_ID;
+string IPFShash_Report;
+string Police_ID;
+string garagemem_ID;
+
+enum contractState {NotReady,CreatedAndReported,Inspected, WaitingForClaimsApproval,
+SurveyorAppointed, GarageInspectionCompletedSuccess, GarageInspectionCompleted_ClaimDenied, ProcessPayment}
+contractState public contState; 
+
+enum insurerState {ReadyToSubmit,SubmittedForApproval, AppointSurveyor, JobAllocatedToSurveyor,InspectionCompleted_ClaimSuccess,InspectionCompleted_ClaimDenied}
+insurerState public insrState;
+
+enum garageState {JobAllocated, InspectionCompleted} //RecordApprovalRequested, SuccessfulApprovalToAccess, FailedApprovalToAccess }
+garageState public garagestate;
+
+mapping (address=> bool) public customerList;//addresses of customers (true or false)
+mapping (address => bool) public approvedCustomers ; 
+
+ 
+mapping(address=>string) public approvedRecords; 
+mapping(address=>insurerState) public insr;
+
+mapping(address=>garageState) public garage;
+mapping(address=>bool) public validatedList; //approved list from the garage's side
+
+  struct Report{
+  uint insuredAmount;
+  uint AmountClaimed;
+  }
+ uint  numberOfRequestsByCustomer; 
+ uint numberOfApprovalsByAutoInsurer;
+ uint numberOfValidationByGaragemember;
+
+//constructor
+
+function Autocontract(){ //one contract per customer & customer creates contract
+    customer_Info = "AX100197";
+    customer= msg.sender;
+    cust_Name= "Honey Dawson"; //example name
+    IPFShash_Report= "QmXgm5QVTy8pRtKrTPmoWPGXNesehCpP4jjFMTpvGamc1p";
+    contState = contractState.NotReady;
+    numberOfRequestsByCustomer = 0;
+    numberOfValidationByGaragemember = 0;
+    numberOfApprovalsByAutoInsurer= 0;
+  policedept= 0x14723A09ACff6D2A60DcdF7aA4AFf308FDDC160C;
+    
+ 
+}
+   //modifiers
+     modifier  OnlyCustomer(){
+        require(msg.sender == customer); 
+        _;
+    }
+    modifier NotCustomer(){
+        require(msg.sender!=customer);
+        _;
+    }
+	 modifier  OnlyPoliceDept(){
+        require(msg.sender == policedept); 
+        _;
+    }
+    modifier NotPoliceDept(){
+        require(msg.sender!=policedept);
+        _;
+    }
+    	 modifier  OnlyVehicleInsurer(){
+        require(msg.sender == insurance_company); 
+        _;
+    }
+   	 modifier  OnlyGarageSupervisor(){
+        require(msg.sender == garage_supervisor); 
+        _;
+    }
+ event AccidentInformed(address owner, string info);
+ event FIRAcknowledged (address owner, string info);
+ 
+  event ClaimSubmitted(address sender, string msg);
+ event SurveyorAppointed(address sender, string msg);
+ 
+ event ValidateClaim(address sender, string info);
+ event ClaimValidatedAndApproved(address sender, string msg);
+ 
+ event denyClaim (address sender, string info);
+ event ClaimDenied(address sender, string msg);
+ 
+ event PaymentApproved (address sender, string info);
+ 
+ 
+  //functions
+    function createInsuranceContract() OnlyCustomer public {
+       require(contState == contractState.NotReady);
+       contState = contractState.CreatedAndReported;
+       AccidentInformed(msg.sender, "Contract created & Accident/Damage --> Reported.");
+       }
+       
+       function inspectandregisterFIR() OnlyPoliceDept public {
+           require(contState == contractState.CreatedAndReported);
+           contState = contractState.Inspected;
+           FIRAcknowledged(msg.sender, "Vehicle Inspected and FIR registered");
+        }
+
+      function submitClaim(address insurerAddress, string reportHash) OnlyCustomer public{
+          require (contState == contractState.Inspected && insr[insurerAddress]==insurerState.ReadyToSubmit);
+        
+           insr[insurerAddress]=insurerState.SubmittedForApproval;
+           contState=contractState.WaitingForClaimsApproval;
+           ClaimSubmitted(msg.sender, "Claim submitted for approval");
+           approvedRecords[insurerAddress]=reportHash;
+           numberOfRequestsByCustomer+= 1;
+       }
+       
+       function appointSurveyor(address insurerAddress, address customer) OnlyVehicleInsurer public{
+           require(contState==contractState.WaitingForClaimsApproval && insr[insurerAddress]== insurerState.SubmittedForApproval);
+           
+           insr[insurerAddress]=insurerState.AppointSurveyor;
+           contState=contractState.SurveyorAppointed;
+           SurveyorAppointed (msg.sender, "Garage Surveyor Appointed to inspect damage.");
+           
+         }
+         
+function inspectVehicle(address insurerAddress, address customer) OnlyGarageSupervisor public{
+         
+require(contState==contractState.SurveyorAppointed &&  insr[insurerAddress]== insurerState.JobAllocatedToSurveyor);
+         
+       if(keccak256(approvedRecords[insurerAddress]) == keccak256(IPFShash_Report))
+       
+       if (insuredAmount<=AmountClaimed){
+       {
+         ValidateClaim(msg.sender, "Submitted claim is checked & is Valid");
+        insr[insurerAddress]= insurerState.InspectionCompleted_ClaimSuccess;
+         contState=contractState.GarageInspectionCompletedSuccess;
+         numberOfValidationByGaragemember+=1;
+         ClaimValidatedAndApproved(msg.sender, "Vehicle inspected for damage; Valid claim! - Proceed to Insurance Payment");
+         
+        }
+       }
+     else if(keccak256(approvedRecords[insurerAddress]) != keccak256(IPFShash_Report))
+     {
+         
+         denyClaim(msg.sender, "Claim is denied; Reported to Insurer");
+           insr[insurerAddress]= insurerState.InspectionCompleted_ClaimDenied;
+         contState=contractState.GarageInspectionCompleted_ClaimDenied;
+        ClaimDenied(msg.sender, "Claim amount defers, Please contact Insurer");
+     }
+  }
+     
+     function approvePayment (address customer) OnlyVehicleInsurer public {
+         
+         require(contState==contractState.GarageInspectionCompletedSuccess);
+         contState=contractState.ProcessPayment;
+         PaymentApproved(msg.sender,"Insurance Amount paid to Customer");
+         
+     }
+  
+     
+        
+       }
+    
