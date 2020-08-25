@@ -1,5 +1,5 @@
 pragma solidity ^0.4.10;
-contract Telmedcontract {
+contract AutoInsurance {
 
 address public customer;
 address public policedept; 
@@ -22,20 +22,17 @@ insurerState public insrState;
 enum garageState {JobAllocated, InspectionCompleted} //RecordApprovalRequested, SuccessfulApprovalToAccess, FailedApprovalToAccess }
 garageState public garagestate;
 
-mapping (address=> bool) public customerList;//addresses of customers (true or false)
-mapping (address => bool) public approvedCustomers ; 
-
- 
+mapping (address=> bool) public customerList;
+mapping (address => bool) public approvedCustomers ; //addresses of approved customers 
 mapping(address=>string) public approvedRecords; 
 mapping(address=>insurerState) public insr;
-
 mapping(address=>garageState) public garage;
 mapping(address=>bool) public validatedList; //approved list from the garage's side
 
-  struct Report{
+  
   uint insuredAmount;
   uint AmountClaimed;
-  }
+  
  uint  numberOfRequestsByCustomer; 
  uint numberOfApprovalsByAutoInsurer;
  uint numberOfValidationByGaragemember;
@@ -52,6 +49,8 @@ function Autocontract(){ //one contract per customer & customer creates contract
     numberOfValidationByGaragemember = 0;
     numberOfApprovalsByAutoInsurer= 0;
   policedept= 0x14723A09ACff6D2A60DcdF7aA4AFf308FDDC160C;
+  insurance_company=0x4B0897b0513fdC7C541B6d9D7E929C4e5364D2dB;
+  garage_supervisor=0x583031D1113aD414F02576BD6afaBfb302140225;
     
  
 }
@@ -118,41 +117,35 @@ function Autocontract(){ //one contract per customer & customer creates contract
            numberOfRequestsByCustomer+= 1;
        }
        
-       function appointSurveyor(address insurerAddress, address customer) OnlyVehicleInsurer public{
-           require(contState==contractState.WaitingForClaimsApproval && insr[insurerAddress]== insurerState.SubmittedForApproval);
+       function appointSurveyor(address customer) OnlyVehicleInsurer public{
+require(contState==contractState.WaitingForClaimsApproval); //&& insr[insurerAddress]== insurerState.SubmittedForApproval);
            
-           insr[insurerAddress]=insurerState.AppointSurveyor;
+  //         insr[insurerAddress]=insurerState.AppointSurveyor;
            contState=contractState.SurveyorAppointed;
            SurveyorAppointed (msg.sender, "Garage Surveyor Appointed to inspect damage.");
            
          }
          
-function inspectVehicle(address insurerAddress, address customer) OnlyGarageSupervisor public{
-         
-require(contState==contractState.SurveyorAppointed &&  insr[insurerAddress]== insurerState.JobAllocatedToSurveyor);
-         
-       if(keccak256(approvedRecords[insurerAddress]) == keccak256(IPFShash_Report))
-       
-       if (insuredAmount<=AmountClaimed){
-       {
-         ValidateClaim(msg.sender, "Submitted claim is checked & is Valid");
+function inspectVehicle(address insurerAddress) OnlyGarageSupervisor public{
+    
+    require(contState==contractState.SurveyorAppointed);
+    if(keccak256(approvedRecords[insurerAddress]) == keccak256(IPFShash_Report)){
+        
+        ValidateClaim(msg.sender, "Submitted claim is checked & is Valid");
         insr[insurerAddress]= insurerState.InspectionCompleted_ClaimSuccess;
-         contState=contractState.GarageInspectionCompletedSuccess;
-         numberOfValidationByGaragemember+=1;
-         ClaimValidatedAndApproved(msg.sender, "Vehicle inspected for damage; Valid claim! - Proceed to Insurance Payment");
-         
-        }
-       }
-     else if(keccak256(approvedRecords[insurerAddress]) != keccak256(IPFShash_Report))
-     {
-         
-         denyClaim(msg.sender, "Claim is denied; Reported to Insurer");
+        contState=contractState.GarageInspectionCompletedSuccess;
+        numberOfValidationByGaragemember+=1;
+        ClaimValidatedAndApproved(msg.sender, "Vehicle inspected for damage; Damage report stored in IPFS. Valid claim! - Proceed to Insurance Payment");
+    }
+     else {
+           denyClaim(msg.sender, "Claim is denied; Reported to Insurer");
            insr[insurerAddress]= insurerState.InspectionCompleted_ClaimDenied;
          contState=contractState.GarageInspectionCompleted_ClaimDenied;
         ClaimDenied(msg.sender, "Claim amount defers, Please contact Insurer");
-     }
-  }
+            }
      
+}
+    
      function approvePayment (address customer) OnlyVehicleInsurer public {
          
          require(contState==contractState.GarageInspectionCompletedSuccess);
@@ -164,4 +157,3 @@ require(contState==contractState.SurveyorAppointed &&  insr[insurerAddress]== in
      
         
        }
-    
