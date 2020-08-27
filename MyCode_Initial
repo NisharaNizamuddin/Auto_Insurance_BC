@@ -153,7 +153,6 @@ function inspectVehicle(address insurerAddress) OnlyGarageSupervisor public{
          PaymentApproved(msg.sender,"Insurance Amount paid to Customer");
          
      }
-  
      
         
        }
